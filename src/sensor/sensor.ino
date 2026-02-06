@@ -5,7 +5,7 @@ void setup() {
 
   Serial.begin(115200);
   delay(500);
-  Serial.print("M5StickC-plus Start\n");
+  Serial.print("replaced at issure/4\n");
 
   pinMode(10, OUTPUT);
 }
