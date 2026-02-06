@@ -1,52 +1,71 @@
+#include <M5StickCPlus2.h>
+#include <esp_now.h>
+#include <WiFi.h>
 
-#include "M5StickCPlus2.h"
+// 受信機のMACアドレスに書き換えないといけない
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; 
+
+bool isSending = false; // 現在送信中かどうかを管理する変数
 
 void setup() {
-    auto cfg = M5.config();
-    StickCP2.begin(cfg);
-    StickCP2.Display.setRotation(1);
-    StickCP2.Display.setTextColor(GREEN);
-    StickCP2.Display.setTextDatum(middle_center);
-    StickCP2.Display.setFont(&fonts::FreeSansBold9pt7b);
-    StickCP2.Display.setTextSize(1);
+  M5.begin();
+  M5.Imu.init();
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
 
-    // init serial
-    Serial.begin(115200);
-    Serial.print("Hello, M5StickCPlus2!\n");
+  if (esp_now_init() != ESP_OK) {
+    M5.Lcd.println("ESP-NOW Init Failed");
+    return;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    M5.Lcd.println("Failed to add peer");
+    return;
+  }
+
+  M5.Lcd.setRotation(3);
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.println("READY: Press Btn A to Start");
 }
 
-void loop(void) {
-    auto imu_update = StickCP2.Imu.update();
-    if (imu_update) {
-        StickCP2.Display.setCursor(0, 40);
-        StickCP2.Display.clear();  // Delay 100ms
+void loop() {
+  M5.update(); // ボタン状態の更新
 
-        auto data = StickCP2.Imu.getImuData();
+  // ボタンAが「押された瞬間」を検知
+  if (M5.BtnA.wasPressed()) {
+    isSending = !isSending; // trueならfalseに、falseならtrueに入れ替える
+    
+    // 画面のリセット
+    M5.Lcd.fillScreen(isSending ? GREEN : BLACK);
+  }
 
-        // The data obtained by getImuData can be used as follows.
-        // data.accel.x;      // accel x-axis value.
-        // data.accel.y;      // accel y-axis value.
-        // data.accel.z;      // accel z-axis value.
-        // data.accel.value;  // accel 3values array [0]=x / [1]=y / [2]=z.
+  if (isSending) {
+    // データ取得
+    float ax, ay, az, gx, gy, gz;
+    M5.Imu.getAccelData(&ax, &ay, &az);
+    M5.Imu.getGyroData(&gx, &gy, &gz);
 
-        // data.gyro.x;      // gyro x-axis value.
-        // data.gyro.y;      // gyro y-axis value.
-        // data.gyro.z;      // gyro z-axis value.
-        // data.gyro.value;  // gyro 3values array [0]=x / [1]=y / [2]=z.
+    // カンマ区切り文字列作成
+    char msg[80]; 
+    sprintf(msg, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", ax, ay, az, gx, gy, gz);
 
-        // data.value;  // all sensor 9values array [0~2]=accel / [3~5]=gyro /
-        //              // [6~8]=mag
+    // ESP-NOW送信
+    esp_now_send(broadcastAddress, (uint8_t *) msg, strlen(msg));
 
-        Serial.printf("ax:%f  ay:%f  az:%f\r\n", data.accel.x, data.accel.y,
-                      data.accel.z);
-        Serial.printf("gx:%f  gy:%f  gz:%f\r\n", data.gyro.x, data.gyro.y,
-                      data.gyro.z);
+    // 送信中の表示
+    M5.Lcd.setCursor(0, 0);
+    M5.Lcd.printf("RECORDING...\n%s", msg);
+  } else {
+    // 停止中の表示
+    M5.Lcd.setCursor(0, 0);
+    M5.Lcd.println("STOPPED\nPress Btn A to Start");
+  }
 
-        StickCP2.Display.printf("IMU:\r\n");
-        StickCP2.Display.printf("%0.2f %0.2f %0.2f\r\n", data.accel.x,
-                                data.accel.y, data.accel.z);
-        StickCP2.Display.printf("%0.2f %0.2f %0.2f\r\n", data.gyro.x,
-                                data.gyro.y, data.gyro.z);
-    }
-    delay(100);
+  delay(10); // 100Hz
 }
