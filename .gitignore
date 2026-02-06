@@ -4,4 +4,4 @@
 /build
 /ignore
 .vscode
-
+.DS_Store
