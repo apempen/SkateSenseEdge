@@ -9,7 +9,7 @@ void setup() {
     StickCP2.Display.setTextDatum(middle_center);
     StickCP2.Display.setFont(&fonts::FreeSansBold9pt7b);
     StickCP2.Display.setTextSize(1);
-
+aaa
     // init serial
     Serial.begin(115200);
     Serial.print("Hello, M5StickCPlus2!\n");
