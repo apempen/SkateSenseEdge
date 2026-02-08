@@ -1,32 +1,42 @@
 #include <Arduino.h>
-#include <WiFi.h>
 #include <M5StickCPlus2.h>
+#include <esp_now.h>
+#include <WiFi.h>
 
+
+void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+    Serial.write(incomingData, len);
+
+    Serial.println();
+}
 
 void setup() {
-  // M5StickC Plus2の初期化
-  auto cfg = M5.config();
-  M5.begin(cfg);
+    // M5StickC Plus2 初期化
+    auto cfg = M5.config();
+    StickCP2.begin(cfg);
 
-  // 画面の設定
-  M5.Lcd.setRotation(1);       // 画面を横向きにする
-  M5.Lcd.fillScreen(BLACK);    // 背景を黒に
-  M5.Lcd.setTextColor(WHITE);  // 文字を白に
-  M5.Lcd.setTextSize(2);       // 文字サイズを調整
+    // シリアル通信開始
+    Serial.begin(115200);
 
-  // MACアドレスの取得
-  String mac = WiFi.macAddress();
+    // StickCP2.Display.setRotation(1);
+    // StickCP2.Display.setTextColor(GREEN);
+    // StickCP2.Display.setTextDatum(middle_center);
+    // StickCP2.Display.setFont(&fonts::FreeSansBold9pt7b);
+    // StickCP2.Display.drawString("RX READY", StickCP2.Display.width() / 2, StickCP2.Display.height() / 2);
 
-  // 画面に出力
-  M5.Lcd.setCursor(10, 40);    // 表示開始位置 (x, y)
-  M5.Lcd.println("MAC Address:");
-  M5.Lcd.setCursor(10, 70);
-  M5.Lcd.println(mac);
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
 
-  // シリアルモニタにも一応出しておく
-  Serial.println(mac);
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("ESP-NOW Init Failed");
+        StickCP2.Display.fillScreen(RED);
+        StickCP2.Display.drawString("Init Failed", StickCP2.Display.width() / 2, StickCP2.Display.height() / 2);
+        return;
+    }
+
+    esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
-  M5.update(); // 本体のボタン状態などの更新（今回は表示だけなので空でもOK）
+    delay(1000);
 }
