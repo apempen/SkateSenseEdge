@@ -3,7 +3,7 @@
 #include <WiFi.h>
 
 // 受信機のMACアドレスに書き換えないといけない
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; 
+uint8_t targetAddress[] = {0x4c,0xc3,0x82,0x9b,0xab,0x34}; 
 
 bool isSending = false; // 現在送信中かどうかを管理する変数
 
@@ -20,7 +20,7 @@ void setup() {
   }
 
   esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  memcpy(peerInfo.peer_addr, targetAddress, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
 
@@ -40,9 +40,6 @@ void loop() {
   // ボタンAが「押された瞬間」を検知
   if (M5.BtnA.wasPressed()) {
     isSending = !isSending; // trueならfalseに、falseならtrueに入れ替える
-    
-    // 画面のリセット
-    M5.Lcd.fillScreen(isSending ? GREEN : BLACK);
   }
 
   if (isSending) {
@@ -56,13 +53,15 @@ void loop() {
     sprintf(msg, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f", ax, ay, az, gx, gy, gz);
 
     // ESP-NOW送信
-    esp_now_send(broadcastAddress, (uint8_t *) msg, strlen(msg));
+    esp_now_send(targetAddress, (uint8_t *) msg, strlen(msg));
 
     // 送信中の表示
+    M5.Lcd.fullScreen(GREEN);
     M5.Lcd.setCursor(0, 0);
     M5.Lcd.printf("RECORDING...\n%s", msg);
   } else {
     // 停止中の表示
+    M5.Lcd.fullScreen(BLACK);
     M5.Lcd.setCursor(0, 0);
     M5.Lcd.println("STOPPED\nPress Btn A to Start");
   }
