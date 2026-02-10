@@ -15,11 +15,11 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     msg[len] = '\0'; // 文字列の終端を追加
 
     // 3. 画面を更新
-    StickCP2.Display.fillScreen(BLACK); // 画面をクリア
-    StickCP2.Display.setCursor(0, 20);  // 左上にカーソル移動
-    StickCP2.Display.printf("Recv: %s", msg); // 内容を表示
-    StickCP2.Display.setCursor(0, 60);
-    StickCP2.Display.printf("Size: %d bytes", len);
+    // StickCP2.Display.fillScreen(BLACK); // 画面をクリア
+    // StickCP2.Display.setCursor(0, 20);  // 左上にカーソル移動
+    // StickCP2.Display.printf("Recv: %s", msg); // 内容を表示
+    // StickCP2.Display.setCursor(0, 60);
+    // StickCP2.Display.printf("Size: %d bytes", len);
 }
 
 void setup() {

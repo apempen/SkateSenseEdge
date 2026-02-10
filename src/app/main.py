@@ -87,4 +87,3 @@ if __name__ == '__main__':
     exit(main(
         port=port, baudrate=baudrate,
         ) or 0)
-
