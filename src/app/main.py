@@ -7,7 +7,8 @@ import sys
 import time
 import serial
 import serial.tools.list_ports
-
+import matplotlib.pyplot as plt  # --- 追加: グラフ用ライブラリ ---
+from collections import deque    # --- 追加: データを保持するキュー ---
 
 def open_serial(port, baudrate, skip_some=True):
     # open a serial port to communicate via USB
@@ -58,6 +59,14 @@ def main(port, baudrate):
     # get epoch time
     epoch = get_time_ms()
 
+    #グラフの初期設定
+    plt.ion() #動的なグラフの作成らしい
+    fig, ax = plt.subplots() #グラフの設定。figがウィンドウ、axが点
+    maxlen = 100  # グラフに表示するデータの個数
+    y_data = deque([0.0]*maxlen, maxlen=maxlen) # データを溜めるキュー、キューだから過去のデータが消えてく
+    lines, = ax.plot(range(maxlen), y_data)     # プロットオブジェクト作成
+    ax.set_ylim(-1.5, 1.5) #データの振れ幅が今回は+-1.0
+    
     # display
     print('# please hit Ctrl+C to exit')
     try:
@@ -66,9 +75,22 @@ def main(port, baudrate):
             # read one line
             line = ser.readline()
             data = parse_line(line)
-            print('data #{:06d},{:10d}ms: acc=[{:7.3f},{:7.3f},{:7.3f}], gyro=[{:7.3f},{:7.3f},{:7.3f}]'.format(
+            print('data #{:06d},{:10d}ms: acc=[{:7.3f}]'.format(
                 i, get_time_ms() - epoch,
-                data[0], data[1], data[2], data[3], data[4], data[5] ))
+                data[0])) #念のためdata[0]だけ表示した。消してもいい。
+
+            val = data[0]
+            if str(val) == 'nan': val = 0.0 # エラー値の処理
+            y_data.append(val)
+
+            # 5回に1回更新
+            if i % 5 == 0:
+                lines.set_ydata(y_data) # データの更新
+                
+                plt.pause(0.001) #これが、いつものplt.show()を表す。(時間)
+            
+            i += 1 #これ抜けてた。ずっとi=0のまんまだった
+            
     except KeyboardInterrupt:
         print('# bye')
 
