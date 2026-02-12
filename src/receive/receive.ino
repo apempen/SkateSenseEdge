@@ -3,10 +3,9 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-#define MSGBUFFER_LENGTH 256
 
-char lastMsgBuffer[MSGBUFFER_LENGTH + 1] = "";
-int lastMsgLen = 0;
+volatile uint16_t receiveCount = 0;
+
 
 // 受信時に呼ばれる関数
 void OnDataRecv(const esp_now_recv_info* info, const uint8_t *incomingData, int len) {
@@ -14,24 +13,17 @@ void OnDataRecv(const esp_now_recv_info* info, const uint8_t *incomingData, int 
     Serial.write(incomingData, len);
     Serial.println();
 
-    // 2. 画面に表示するために、データを文字列に変換
-    if(len < MSGBUFFER_LENGTH) {
-      memcpy(lastMsgBuffer, incomingData, len);
-      lastMsgBuffer[len] = '\0';
-      lastMsgLen = len;
-    } else {
-      memcpy(lastMsgBuffer, incomingData, MSGBUFFER_LENGTH);
-      lastMsgBuffer[MSGBUFFER_LENGTH] = '\0';
-      lastMsgLen = MSGBUFFER_LENGTH;
-    }
-
-    // 3. 表示はloop関数内で
+	// 受信カウントをインクリメント
+	auto tmp = receiveCount;
+	receiveCount = tmp + 1;
 }
 
 void setup() {
     auto cfg = M5.config();
     StickCP2.begin(cfg);
     Serial.begin(115200);
+    setCpuFrequencyMhz(80); // 省電力化 https://msr-r.net/m5stickc-mobilebattery/
+    StickCP2.Display.setBrightness(4); // 省電力化
 
     // 画面の初期設定
     StickCP2.Display.setRotation(1);
@@ -57,9 +49,7 @@ void loop() {
 
     // 3. 画面を更新
     StickCP2.Display.fillScreen(BLACK); // 画面をクリア
-    StickCP2.Display.setCursor(0, 20);  // 左上にカーソル移動
-    StickCP2.Display.printf("Recv: %s", lastMsgBuffer); // 内容を表示
-    StickCP2.Display.setCursor(0, 60);
-    StickCP2.Display.printf("Size: %d bytes", lastMsgLen);
-    delay(10); 
+	StickCP2.Display.setCursor(0, 20);
+	StickCP2.Display.printf("Recv cnt: %d", receiveCount);
+    delay(1000 / 10);  // 更新は10Hz程度で
 }
