@@ -3,23 +3,29 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+#define MSGBUFFER_LENGTH 256
+
+char lastMsgBuffer[MSGBUFFER_LENGTH + 1] = "";
+int lastMsgLen = 0;
+
 // 受信時に呼ばれる関数
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
+void OnDataRecv(const esp_now_recv_info* info, const uint8_t *incomingData, int len) {
     // 1. シリアルに出力
     Serial.write(incomingData, len);
     Serial.println();
 
     // 2. 画面に表示するために、データを文字列に変換
-    char msg[len + 1];
-    memcpy(msg, incomingData, len);
-    msg[len] = '\0'; // 文字列の終端を追加
+    if(len < MSGBUFFER_LENGTH) {
+      memcpy(lastMsgBuffer, incomingData, len);
+      lastMsgBuffer[len] = '\0';
+      lastMsgLen = len;
+    } else {
+      memcpy(lastMsgBuffer, incomingData, MSGBUFFER_LENGTH);
+      lastMsgBuffer[MSGBUFFER_LENGTH] = '\0';
+      lastMsgLen = MSGBUFFER_LENGTH;
+    }
 
-    // 3. 画面を更新
-    StickCP2.Display.fillScreen(BLACK); // 画面をクリア
-    StickCP2.Display.setCursor(0, 20);  // 左上にカーソル移動
-    StickCP2.Display.printf("Recv: %s", msg); // 内容を表示
-    StickCP2.Display.setCursor(0, 60);
-    StickCP2.Display.printf("Size: %d bytes", len);
+    // 3. 表示はloop関数内で
 }
 
 void setup() {
@@ -48,5 +54,12 @@ void setup() {
 
 void loop() {
     // ESP-NOWはイベント駆動なのでloop内は空でも動作します
+
+    // 3. 画面を更新
+    StickCP2.Display.fillScreen(BLACK); // 画面をクリア
+    StickCP2.Display.setCursor(0, 20);  // 左上にカーソル移動
+    StickCP2.Display.printf("Recv: %s", lastMsgBuffer); // 内容を表示
+    StickCP2.Display.setCursor(0, 60);
+    StickCP2.Display.printf("Size: %d bytes", lastMsgLen);
     delay(10); 
 }
