@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Host application to capture serial data from the receiver M5Stick
-# p5ライブラリを用いてProcessingの文法を使い、簡単にGUIインターフェースを作成する
+# py5ライブラリを用いてProcessingの文法を使い、簡単にGUIインターフェースを作成する
 
 import os
 import sys
@@ -9,7 +9,7 @@ import sys
 #import matplotlib.pyplot as plt  # --- 追加: グラフ用ライブラリ ---
 from collections import deque    # --- 追加: データを保持するキュー ---
 import edge                      # serialの代わり
-import p5                        # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
+import py5                       # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
 
 
 maxlen = 100  # グラフに表示するデータの個数
@@ -18,7 +18,7 @@ coord = lambda u: (u[0] * 2 + 200, - u[1] * 14 + 100)
 
 def setup():
     # プログラムの最初に1度だけ呼ばれる
-    p5.size(640, 480)  # ウィンドウサイズ
+    py5.size(640, 480)  # ウィンドウサイズ
 
 
 def draw():
@@ -31,32 +31,25 @@ def draw():
         y_data.append(val)
 
     # グラフ描画
-    p5.background(255)
-    p5.stroke(128)
-    p5.line((0, 50), (200, 50))
-    p5.line((0, 150), (200, 150))
-    p5.stroke(0)
-    p5.line((0, 100), (200, 100))
-    p5.line((100, 0), (100, 200))
-    p5.stroke(200, 200, 0)
+    py5.background(255)
+    py5.stroke(128)
+    py5.line(0, 50, 200, 50)
+    py5.line(0, 150, 200, 150)
+    py5.stroke(0)
+    py5.line(0, 100, 200, 100)
+    py5.line(100, 0, 100, 200)
+    py5.stroke(200, 200, 0)
     for i in range(len(y_data) - 1):
         p0 = coord((-i, y_data[-i]))
         p1 = coord((-i-1, y_data[-i-1]))
-        p5.line(p0, p1)
+        py5.line(*p0, *p1)
 
     # カーソル描画
-    p5.stroke(255, 0, 0)
-    p5.fill(255)
-    p5.ellipse(mouse_x, mouse_y, 4, 4)
+    py5.stroke(255, 0, 0)
+    py5.fill(255)
+    py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
 
 
-
-def main(port, baudrate):
-    rc = edge.init(port, baudrate)
-    if rc != 0:
-        return rc
-    p5.run()
-    return 0
 
 
 if __name__ == '__main__':
@@ -68,6 +61,7 @@ if __name__ == '__main__':
     port = sys.argv[1]
     baudrate = 115200
 
-    exit(main(
-        port=port, baudrate=baudrate,
-        ) or 0)
+    rc = edge.init(port, baudrate)
+    if rc != 0:
+        exit(rc)
+    py5.run_sketch()
