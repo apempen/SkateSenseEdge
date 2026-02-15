@@ -1,78 +1,55 @@
 #!/usr/bin/env python3
 
 # Host application to capture serial data from the receiver M5Stick
+# py5ライブラリを用いてProcessingの文法を使い、簡単にGUIインターフェースを作成する
 
 import os
 import sys
-import time
-import serial
-import serial.tools.list_ports
+#import serial
+#import matplotlib.pyplot as plt  # --- 追加: グラフ用ライブラリ ---
+from collections import deque    # --- 追加: データを保持するキュー ---
+import edge                      # serialの代わり
+import py5                       # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
 
 
-def open_serial(port, baudrate, skip_some=True):
-    # open a serial port to communicate via USB
-    try:
-        ser = serial.Serial(port=port, baudrate=baudrate)
-    except serial.SerialException as e:
-        print('SerialException:', e, file=sys.stderr)
-        return 8
-    if not ser.isOpen():
-        ser.open()
-    if skip_some:
-        for _ in range(3):
-            ser.readline()  # flush buffer
-    return ser
+maxlen = 100  # グラフに表示するデータの個数
+y_data = deque([0.0]*maxlen, maxlen=maxlen) # データを溜めるキュー、キューだから過去のデータが消えてく
+coord = lambda u: (u[0] * 2 + 200, - u[1] * 14 + 100)
+
+def setup():
+    # プログラムの最初に1度だけ呼ばれる
+    py5.size(640, 480)  # ウィンドウサイズ
 
 
-def parse_line(line):
-    # split line (str) to data (list of float)
-    default = [float('nan')] * 6
-    xx = [x.strip() for x in line.split(b',')]
-    try:
-        xx = [float(x) for x in xx]
-    except ValueError:
-        xx = default
-    if len(xx) < 6:
-        xx += [float('nan')] * (6 - len(xx))
-    elif len(xx) > 6:
-        xx = xx[:6]
-    return xx
+def draw():
+    # プログラム中繰り返し呼ばれる
+
+    # データを読み込む
+    for record in edge.ask_records():
+        val = record.tilt
+        if str(val) == 'nan': val = 0.0 # エラー値の処理
+        y_data.append(val)
+
+    # グラフ描画
+    py5.background(255)
+    py5.stroke(128)
+    py5.line(0, 50, 200, 50)
+    py5.line(0, 150, 200, 150)
+    py5.stroke(0)
+    py5.line(0, 100, 200, 100)
+    py5.line(100, 0, 100, 200)
+    py5.stroke(200, 200, 0)
+    for i in range(len(y_data) - 1):
+        p0 = coord((-i, y_data[-i]))
+        p1 = coord((-i-1, y_data[-i-1]))
+        py5.line(*p0, *p1)
+
+    # カーソル描画
+    py5.stroke(255, 0, 0)
+    py5.fill(255)
+    py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
 
 
-def get_time_ms():
-    # what time is it now? (milliseconds, integer)
-    return int(time.time() * 1000)
-
-
-def main(port, baudrate):
-
-    # open serial
-    print('# try to open serial port {} (baudrate={})'.format(port, baudrate))
-    ser = open_serial(port, baudrate)
-    if ser is not None:
-        print('#   succeeded!')
-    else:
-        print('#   failed...')
-        return 1
-
-    # get epoch time
-    epoch = get_time_ms()
-
-    # display
-    print('# please hit Ctrl+C to exit')
-    try:
-        i = 0
-        while True:
-            # read one line
-            line = ser.readline()
-            data = parse_line(line)
-            print('data #{:06d},{:10d}ms: acc=[{:7.3f},{:7.3f},{:7.3f}], gyro=[{:7.3f},{:7.3f},{:7.3f}]'.format(
-                i, get_time_ms() - epoch,
-                data[0], data[1], data[2], data[3], data[4], data[5] ))
-    except KeyboardInterrupt:
-        print('# bye')
-
-    return 0
 
 
 if __name__ == '__main__':
@@ -84,7 +61,7 @@ if __name__ == '__main__':
     port = sys.argv[1]
     baudrate = 115200
 
-    exit(main(
-        port=port, baudrate=baudrate,
-        ) or 0)
-
+    rc = edge.init(port, baudrate)
+    if rc != 0:
+        exit(rc)
+    py5.run_sketch()
