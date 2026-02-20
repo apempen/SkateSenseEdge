@@ -11,7 +11,7 @@ edge.py
 - `make_record` ブレードの角度などを計算する
 
 """
-
+import sys
 import math
 import time
 import serial
@@ -171,19 +171,23 @@ def make_record(sensor: list):
 # -- その他
 
 def open_serial(port, baudrate, skip_some=True):
-    # open a serial port to communicate via USB
     try:
-        ser = serial.Serial(port=port, baudrate=baudrate)
+        # timeout=1.0 を追加（1秒間データが来なければ readline を抜ける）
+        ser = serial.Serial(port=port, baudrate=baudrate, timeout=1.0)
     except serial.SerialException as e:
         print('SerialException:', e, file=sys.stderr)
-        return 8
-    if not ser.isOpen():
+        return None # 前述の通り None に修正
+    
+    if not ser.is_open:
         ser.open()
-    if skip_some:
-        for _ in range(3):
-            ser.readline()  # flush buffer
-    return ser
 
+    if skip_some:
+        print("# Cleaning buffer...")
+        for _ in range(3):
+            line = ser.readline() # 1秒待って来なければ次へ行く
+            print(f"# Initial line: {line}") # 何か受信できているか確認用
+            
+    return ser
 
 def parse_line(line):
     # split line (str) to data (list of float)
