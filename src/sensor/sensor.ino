@@ -2,27 +2,33 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+// 受信機のMACアドレス
+uint8_t targetAddress[] = {0x4c, 0xc3, 0x82, 0x9b, 0xab, 0x34}; 
 
-#define MSGBUFFER_LENGTH 255
-
-// 受信機のMACアドレスに書き換えないといけない
-uint8_t targetAddress[] = {0x4c,0xc3,0x82,0x9b,0xab,0x34}; 
-
-bool isSending = true; // 現在送信中かどうかを管理する変数
-uint16_t sendCount = 0;    // 送信回数
-bool sendError = false; 
+// 送信管理
+bool isSending = true;
+uint32_t sendCount = 0;
+char msgBuffer[128]; // IMUデータ用なら128あれば十分です
 
 void setup() {
-  M5.begin();
-  M5.Imu.init();
-  setCpuFrequencyMhz(80); // 省電力化 https://msr-r.net/m5stickc-mobilebattery/
-  M5.Display.setBrightness(4); // 省電力化
+  // M5.begin() で IMU も初期化されます
+  auto cfg = M5.config();
+  M5.begin(cfg);
+
+  // 省電力設定
+  setCpuFrequencyMhz(80);
+  M5.Display.setBrightness(4);
   
+  M5.Display.setRotation(1);
+  M5.Display.setTextColor(GREEN);
+  M5.Display.setFont(&fonts::FreeSansBold9pt7b);
+
+  // ESP-NOW 初期化
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
   if (esp_now_init() != ESP_OK) {
-    M5.Lcd.println("ESP-NOW Init Failed");
+    M5.Display.println("ESP-NOW Init Failed");
     return;
   }
 
@@ -32,58 +38,44 @@ void setup() {
   peerInfo.encrypt = false;
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    M5.Lcd.println("Failed to add peer");
+    M5.Display.println("Failed to add peer");
     return;
   }
 
-  M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setRotation(1);
-  M5.Lcd.setTextColor(GREEN);
-  M5.Lcd.setFont(&fonts::FreeSansBold9pt7b);
-  M5.Lcd.println("READY");
-  // M5.Lcd.println("Press Btn A to Start");
+  M5.Display.fillScreen(BLACK);
+  M5.Display.println("READY");
 }
 
 void loop() {
-  M5.update(); // ボタン状態の更新
-
-  // ボタンAが「押された瞬間」を検知
-  // if (M5.BtnA.wasPressed()) {
-  //   isSending = !isSending; // trueならfalseに、falseならtrueに入れ替える
-  //   sendError = false;
-  // }
+  M5.update();
 
   if (isSending) {
-    // データ取得
-    float ax, ay, az, gx, gy, gz;
+    // 1. IMUデータの取得（必ず 0.0f で初期化してゴミデータを防ぐ）
+    float ax=0, ay=0, az=0, gx=0, gy=0, gz=0;
+    
+    // Plus2 の推奨手順：updateを呼んでから取得
+    M5.Imu.update(); 
     M5.Imu.getAccelData(&ax, &ay, &az);
     M5.Imu.getGyroData(&gx, &gy, &gz);
 
-    // カンマ区切り文字列作成
-    // snprintf関数でより安全に
-    char msg[MSGBUFFER_LENGTH + 1]; 
-    auto written = snprintf(msg, sizeof(msg), "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f", ax, ay, az, gx, gy, gz);
-    if(written == sizeof(msg)) {
-      sendError = true;
+    // 2. カンマ区切り文字列の作成
+    // 文字列の終端を保証し、バッファオーバーフローを防ぐ
+    int len = snprintf(msgBuffer, sizeof(msgBuffer), "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f", 
+                       ax, ay, az, gx, gy, gz);
+
+    // 3. ESP-NOW送信
+    if (len > 0) {
+      esp_now_send(targetAddress, (uint8_t *)msgBuffer, len);
     }
 
-    // ESP-NOW送信
-    esp_now_send(targetAddress, (uint8_t *) msg, strlen(msg));
-
-    // 送信中の表示、適当に間引く
-    if(sendCount % 0x10 == 0) {
-      M5.Lcd.fillScreen(!sendError ? BLACK : RED);
-      M5.Lcd.setCursor(0, 20);
-      M5.Lcd.printf("RECORDING...\n%s", msg);
+    // 4. 画面表示（描画負荷を抑えるため10回に1回）
+    if (sendCount % 10 == 0) {
+      M5.Display.fillScreen(BLACK);
+      M5.Display.setCursor(0, 20);
+      M5.Display.printf("%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\nCnt: %d", ax,ay,az,gx,gy,gz, sendCount);
     }
 
-    // 送信回数のインクリメント
-    ++ sendCount;
-  } else {
-    // 停止中の表示
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setCursor(0, 20);
-    M5.Lcd.println("STOPPED\nPress Btn A to Start");
+    sendCount++;
   }
 
   delay(10); // 100Hz
