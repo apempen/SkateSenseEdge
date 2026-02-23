@@ -118,20 +118,24 @@ def draw():
                 fn_pretty = lambda y: '{:d} deg'.format(int(y * 180 / math.pi)) )
         graph.set_ys([nan2zero(rss(rec.a)) for rec in records],
                 'sensor accel', icon='a', color=(255,99,0),
-                fn_value  = lambda y: y * 2 - 1.0,
-                fn_pretty = lambda y: '{:.2f} m/s'.format(y) )
+                fn_value  = lambda y: y * 0.4 - 1.0,
+                fn_pretty = lambda y: '{:.2f} G'.format(y) )
         graph.set_ys([nan2zero(rss(rec.w)) for rec in records],
                 'sensor gyro', icon='g', color=(155,33,0),
-                fn_value  = lambda y: y * 0.05 - 1.0,
-                fn_pretty = lambda y: '{:d} deg/s'.format(int(y * 180 / math.pi)) )
+                fn_value  = lambda y: y * math.pi / 180 - 1.0,
+                fn_pretty = lambda y: '{:d} deg/s'.format(int(y)) )
         graph.set_ys([rec.jumping for rec in records],
                 'jumping', icon='J', color=(0,200,0),
                 fn_value  = lambda y: -0.01 + 0.02 * int(y),
                 fn_pretty = lambda y: 'air' if y else 'grounded' )
         sphere.set_vector(nan2zero(rec0.a),
                 'sensor accel', icon='a', color=(255,99,0),
-                fn_value  = lambda y: vmul(y, 1),
-                fn_pretty = lambda y: '{:.2f} m/s'.format(rss(y)) )
+                fn_value  = lambda y: vmul(y, 0.2),
+                fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
+        sphere.set_vector(nan2zero(rec0.w),
+                'sensor gyro', icon='w', color=(155,33,0),
+                fn_value  = lambda y: vmul(y, math.pi / 180),
+                fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
     graph.plot(40, 0)
     sphere.plot(480, 0, rx, ry)
 
