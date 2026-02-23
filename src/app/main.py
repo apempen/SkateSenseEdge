@@ -56,6 +56,11 @@ graph = None
 sphere = None
 ellipse = None
 
+key = 0
+
+show_3d = True
+
+
 def setup():
     global graph, sphere, ellipse
     # プログラムの最初に1度だけ呼ばれる
@@ -66,7 +71,7 @@ def setup():
     ellipse = EllipseDrawer(400,400)
 
 def draw():
-    global lastmouse, pivotx, pivoty
+    global lastmouse, pivotx, pivoty, show_3d
     # プログラム中繰り返し呼ばれる
 
     # データを読み込む
@@ -133,22 +138,38 @@ def draw():
         ax = nan2zero(rec0.a[0])
         ay = nan2zero(rec0.a[1])
         ellipse.plot_point(ax, ay, 'Accel XY', icon='A', color=(255, 99, 0))
-        # sphere.set_vector(nan2zero(rec0.a),
-        #         'sensor accel', icon='a', color=(255,99,0),
-        #         fn_value  = lambda y: vmul(y, 0.2),
-        #         fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
-        # sphere.set_vector(nan2zero(rec0.w),
-        #         'sensor gyro', icon='w', color=(155,33,0),
-        #         fn_value  = lambda y: vmul(y, math.pi / 180),
-        #         fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
+        sphere.set_vector(nan2zero(rec0.a),
+                'sensor accel', icon='a', color=(255,99,0),
+                fn_value  = lambda y: vmul(y, 0.2),
+                fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
+        sphere.set_vector(nan2zero(rec0.w),
+                 'sensor gyro', icon='w', color=(155,33,0),
+                 fn_value  = lambda y: vmul(y, math.pi / 180),
+                 fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
     graph.plot(40, 0)
-    ellipse.plot(480,0)
-    # sphere.plot(480, 0, rx, ry)
-
-    # カーソル描画
+    
+    if show_3d:
+        sphere.plot(480, 0, rx, ry)
+    else:
+        ellipse.plot(480,0)
+    
+        # カーソル描画
     py5.stroke(255, 0, 0)
     py5.fill(255)
     py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
+    
+    
+def key_pressed():
+    global show_3d
+    # スペースキーを押すたびに2Dと3Dをトグル（切り替え）する
+    if py5.key == ' ':
+        show_3d = not show_3d
+    # 特定のキーで直接切り替えたい場合は以下のようにします
+    elif py5.key == '2':
+        show_3d = False
+    elif py5.key == '3':
+        show_3d = True
+
 
 
 
