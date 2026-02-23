@@ -362,5 +362,96 @@ class SphereDrawer:
         else:
             return 3
 
+class EllipseDrawer:
+    # 2次元XY平面プロット処理
+    #   センサーのX, Y値を座標として、平面上の動きを視覚化する
 
+    def __init__(self, w, h, *, fontsize=12):
+        self.__gw = w                # 描画エリアの幅
+        self.__gh = h
+        self.__ox = w // 2           # 中心点(0,0)の座標
+        self.__oy = h // 2
+        self.__scale = min(w, h) // 4 # スケーリング倍率
+        self.__fs = fontsize         # フォントサイズ
+        self.__points = []           # プロットするデータのリスト
+
+    def plot_point(self, x, y, name, *, icon=None, color=None, fn_pretty=None):
+        """
+        現在のXY座標を登録する。
+        x, y: 数値（通常 -1.0 〜 1.0 程度を想定）
+        """
+        idx = len(self.__points)
+        if icon is None: icon = '●'
+        if color is None: color = (255, 0, 0) # デフォルトは赤
+        
+        # 表示用の文字列作成
+        if fn_pretty:
+            current = fn_pretty(x, y)
+        else:
+            current = f"({x:.2f}, {y:.2f})"
+            
+        self.__points.append({
+            'idx': idx,
+            'name': name,
+            'icon': icon,
+            'color': color,
+            'pos': (x, y),
+            'text': current
+        })
+
+    def reset(self):
+        self.__points.clear()
+
+    def plot(self, gx, gy):
+        """
+        指定した座標(gx, gy)を起点にXY平面を描画する
+        """
+        py5.translate(gx, gy)
+        self._plot_background()
+        self._plot_data()
+        py5.translate(-gx, -gy)
+        self.reset()
+
+    def _plot_background(self):
+        # 背景枠
+        py5.stroke(0)
+        py5.fill(240)
+        py5.rect(0, 0, self.__gw, self.__gh)
+        
+        # 補助線（十字）
+        py5.stroke(200)
+        py5.line(self.__ox, 0, self.__ox, self.__gh) # Y軸
+        py5.line(0, self.__oy, self.__gw, self.__oy) # X軸
+        
+        # 目盛り（1.0刻みの円など）
+        py5.no_fill()
+        py5.stroke(180)
+        py5.ellipse(self.__ox, self.__oy, self.__scale * 2, self.__scale * 2)
+        
+        # ラベル
+        py5.fill(100)
+        py5.text_size(10)
+        py5.text("X", self.__gw - 15, self.__oy - 5)
+        py5.text("Y", self.__ox + 5, 15)
+
+    def _plot_data(self):
+        py5.text_size(self.__fs)
+        for p in self.__points:
+            # 座標計算（数学的な座標系に合わせるためYはマイナス）
+            px = self.__ox + (p['pos'][0] * self.__scale)
+            py = self.__oy - (p['pos'][1] * self.__scale)
+            
+            # 点の描画
+            py5.no_stroke()
+            py5.fill(*p['color'])
+            py5.ellipse(px, py, 8, 8)
+            
+            # テキスト表示
+            py5.fill(0)
+            py5.text_align(py5.LEFT, py5.CENTER)
+            py5.text(f"{p['icon']} {p['text']}", px + 10, py)
+            
+            # 凡例表示（左上）
+            py5.text_align(py5.LEFT, py5.TOP)
+            py5.text(f"{p['icon']}: {p['name']}", 5, 5 + (p['idx'] * (self.__fs + 2)))
 

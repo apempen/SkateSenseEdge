@@ -12,7 +12,7 @@ from collections import deque    # --- 追加: データを保持するキュー
 import edge                      # serialの代わり
 import py5                       # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
 import numpy as np
-from graph import GraphDrawer, SphereDrawer  # グラフ表示用のスクリプト
+from graph import GraphDrawer, SphereDrawer, EllipseDrawer  # グラフ表示用のスクリプト
 
 
 
@@ -54,15 +54,16 @@ pivoty = 0
 
 graph = None
 sphere = None
+ellipse = None
 
 def setup():
-    global graph, sphere
+    global graph, sphere, ellipse
     # プログラムの最初に1度だけ呼ばれる
     py5.size(960, 480)  # ウィンドウサイズ、P3Dとすることで3次元描画が可能
     py5.frame_rate(10)
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
-
+    ellipse = EllipseDrawer(400,400)
 
 def draw():
     global lastmouse, pivotx, pivoty
@@ -128,16 +129,21 @@ def draw():
                 'jumping', icon='J', color=(0,200,0),
                 fn_value  = lambda y: -0.01 + 0.02 * int(y),
                 fn_pretty = lambda y: 'air' if y else 'grounded' )
-        sphere.set_vector(nan2zero(rec0.a),
-                'sensor accel', icon='a', color=(255,99,0),
-                fn_value  = lambda y: vmul(y, 0.2),
-                fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
-        sphere.set_vector(nan2zero(rec0.w),
-                'sensor gyro', icon='w', color=(155,33,0),
-                fn_value  = lambda y: vmul(y, math.pi / 180),
-                fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
+        
+        ax = nan2zero(rec0.a[0])
+        ay = nan2zero(rec0.a[1])
+        ellipse.plot_point(ax, ay, 'Accel XY', icon='A', color=(255, 99, 0))
+        # sphere.set_vector(nan2zero(rec0.a),
+        #         'sensor accel', icon='a', color=(255,99,0),
+        #         fn_value  = lambda y: vmul(y, 0.2),
+        #         fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
+        # sphere.set_vector(nan2zero(rec0.w),
+        #         'sensor gyro', icon='w', color=(155,33,0),
+        #         fn_value  = lambda y: vmul(y, math.pi / 180),
+        #         fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
     graph.plot(40, 0)
-    sphere.plot(480, 0, rx, ry)
+    ellipse.plot(480,0)
+    # sphere.plot(480, 0, rx, ry)
 
     # カーソル描画
     py5.stroke(255, 0, 0)
