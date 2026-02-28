@@ -122,7 +122,7 @@ def draw():
                 fn_pretty = lambda y: '{:.2f} G'.format(y) )
         graph.set_ys([nan2zero(rss(rec.w)) for rec in records],
                 'sensor gyro', icon='g', color=(155,33,0),
-                fn_value  = lambda y: y * math.pi / 180 - 1.0,
+                fn_value  = lambda y: y * math.pi / 180 * 0.2 - 1.0,
                 fn_pretty = lambda y: '{:d} deg/s'.format(int(y)) )
         graph.set_ys([rec.jumping for rec in records],
                 'jumping', icon='J', color=(0,200,0),
@@ -130,11 +130,11 @@ def draw():
                 fn_pretty = lambda y: 'air' if y else 'grounded' )
         sphere.set_vector(nan2zero(rec0.a),
                 'sensor accel', icon='a', color=(255,99,0),
-                fn_value  = lambda y: vmul(y, 0.2),
+                fn_value  = lambda y: vmul(y, 1.0),
                 fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
         sphere.set_vector(nan2zero(rec0.w),
                 'sensor gyro', icon='w', color=(155,33,0),
-                fn_value  = lambda y: vmul(y, math.pi / 180),
+                fn_value  = lambda y: vmul(y, math.pi / 180 * 0.4),
                 fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
     graph.plot(40, 0)
     sphere.plot(480, 0, rx, ry)
