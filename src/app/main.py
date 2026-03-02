@@ -121,7 +121,15 @@ def draw():
                 fn_value  = lambda y: y * 0.4 - 1.0,
                 fn_pretty = lambda y: '{:.2f} G'.format(y) )
         graph.set_ys([nan2zero(rss(rec.w)) for rec in records],
-                'sensor gyro', icon='g', color=(155,33,0),
+                'sensor gyro', icon='w', color=(155,33,0),
+                fn_value  = lambda y: y * math.pi / 180 * 0.2 - 1.0,
+                fn_pretty = lambda y: '{:d} deg/s'.format(int(y)) )
+        graph.set_ys([nan2zero(rss(rec.accel)) for rec in records],
+                'calib accel', icon='A', color=(255,99,0),
+                fn_value  = lambda y: y * 0.4 - 1.0,
+                fn_pretty = lambda y: '{:.2f} G'.format(y) )
+        graph.set_ys([nan2zero(rss(rec.angvel)) for rec in records],
+                'calib gyro', icon='W', color=(155,33,0),
                 fn_value  = lambda y: y * math.pi / 180 * 0.2 - 1.0,
                 fn_pretty = lambda y: '{:d} deg/s'.format(int(y)) )
         graph.set_ys([rec.jumping for rec in records],
@@ -134,6 +142,14 @@ def draw():
                 fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
         sphere.set_vector(nan2zero(rec0.w),
                 'sensor gyro', icon='w', color=(155,33,0),
+                fn_value  = lambda y: vmul(y, math.pi / 180 * 0.4),
+                fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
+        sphere.set_vector(nan2zero(rec0.accel),
+                'calib accel', icon='A', color=(255,99,0),
+                fn_value  = lambda y: vmul(y, 1.0),
+                fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
+        sphere.set_vector(nan2zero(rec0.angvel),
+                'calib gyro', icon='W', color=(155,33,0),
                 fn_value  = lambda y: vmul(y, math.pi / 180 * 0.4),
                 fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
     graph.plot(40, 0)

@@ -21,7 +21,7 @@ from collections import deque
 from dataclasses import dataclass
 import itertools
 import numpy as np
-from algorithm import Quaternion, fit_circle, fit_line
+from algorithm import Quaternion, fit_circle, fit_line, estimate_rotation
 
 
 # --- グローバル変数の定義 ---
@@ -78,7 +78,6 @@ def init(port, baudrate, maxlen=100):
 
     # init other variables
     clear()
-    set_gravity((0.0, 0.0, 1.0))
 
     # run the thread
     _thread = threading.Thread(target=_job, daemon=True)
@@ -124,6 +123,63 @@ def ask_records():
 
 # -- データの計算
 
+class Calibrator:
+
+    def __init__(self):
+        self.la = 1.0
+        self.lw = 1.0
+        self.rot     = Quaternion.identity()
+        self.rot_inv = self.rot.inverse()
+        self.ba = Quaternion.zero()
+        self.bw = Quaternion.zero()
+
+    def transform_a(self, a):
+        return self.la * (self.rot @ a) + self.ba
+
+    def transform_w(self, w):
+        return self.lw * (self.rot @ w) + self.bw
+
+    def calibrate(self, a0, a1, aa, w0, w1, ww):
+        # aa is a list of raw accelaration data and ww is a list of raw angular velocity
+        #   (a0, w0) is sensor values which is sent while the device is settled on flat surface
+        #   (a1, w1) is sensor values which is sent while the device is inclined to the right
+        #   aa must align as a circle and ww must align as a line
+        #   then estimate
+        #     - the rotation (self.rot),
+        #     - the scale factors (self.la, self.lw), and
+        #     - the biases (self.ba, self.bw)
+        circle = fit_circle(aa)
+        line = fit_line(ww)
+        ao = circle.center
+        r0 = circle.estimate(a0) - ao
+        r1 = circle.estimate(a1) - ao
+        wo = line.estimate(w0)
+        d0 = line.direction
+
+        # let's calibrate!
+        la = 1 / r0.norm()
+        lw = 1.0
+        az = r0.normalized()
+        ay = Quaternion.cross(r0, r1).normalized()  # cross product
+        wy = d0.normalized() if Quaternion.dot(d0, ay) >= 0 else - d0.normalized()  # reverse the direction depending on the dot product
+        ez = Quaternion.k()
+        ey = Quaternion.j()
+        rot     = estimate_rotation([az, ay, Quaternion.zero()], [ez, ey, Quaternion.zero()]).conjugate()
+        rot_inv = rot.conjugate()
+        ba = - la * (rot @ ao)
+        bw = - lw * (rot @ wo)
+
+        # done!
+        self.la = la
+        self.lw = lw
+        self.rot     = rot
+        self.rot_inv = rot_inv
+        self.ba = ba
+        self.bw = bw
+
+
+# global status
+
 _jump_count = 0
 _calib = Calibrator()
 
@@ -132,6 +188,28 @@ def destroy_memory():
     # 計算に必要なデータをリセットする
     _jump_count = 0
     _calib = Calibrator()
+    # ------------ (後で消す)
+    try:
+        with open('ignore/cap1.log', 'r') as f:
+            text = f.read()
+        items = list()
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            items.append(list(map(float, line.split(','))))
+        aa = [Quaternion.pure(x, y, z) for _,x,y,z,_,_,_ in items]
+        ww = [Quaternion.pure(x, y, z) for _,_,_,_,x,y,z in items]
+        a0 = sum(aa[100:110], Quaternion.zero()) / 10
+        a1 = sum(aa[240:250], Quaternion.zero()) / 10
+        w0 = sum(ww[100:110], Quaternion.zero()) / 10
+        w1 = sum(ww[240:250], Quaternion.zero()) / 10
+        _calib.calibrate(a0, a1, aa, w0, w1, ww)
+    except OSError:
+        pass
+    print('!!!! PLEASE REMOVE ME LATER!!!!! from edge.py destroy_memory()')
+    # ------------
+
 
 def make_record(sensor: list):
     global _jump_count
@@ -168,64 +246,6 @@ def make_record(sensor: list):
             angvel  = angvel.imag(),
             gravity = (0.0, 0.0, 0.0,),
             )
-
-class Calibrator:
-
-    def __init__(self):
-        self.la = 1.0
-        self.lw = 1.0
-        self.rot     = Quaternion.identity()
-        self.rot_inv = self.rot.inverse()
-        self.ba = Quaternion.zero()
-        self.bw = Quaternion.zero()
-
-    def transform_a(a):
-        return self.la * (self.rot @ a) + self.ba
-
-    def transform_w(w):
-        return self.lw * (self.rot @ w) + self.bw
-
-    def calibrate(a0, a1, aa, w0, w1, ww):
-        # aa is a list of raw accelaration data and ww is a list of raw angular velocity
-        #   (a0, w0) is sensor values which is sent while the device is settled on flat surface
-        #   (a1, w1) is sensor values which is sent while the device is inclined to the right
-        #   aa must align as a circle and ww must align as a line
-        #   then estimate
-        #     - the rotation (self.rot),
-        #     - the scale factors (self.la, self.lw), and
-        #     - the biases (self.ba, self.bw)
-        circle = fit_circle(aa)
-        line = fit_line(ww)
-        ao = circle.center
-        r0 = circle.estimate(a0) - ao
-        r1 = circle.estimate(a1) - ao
-        wo = line.estimate(w0)
-        d0 = line.direction
-
-        # let's calibrate!
-        la = 1 / r0.norm()
-        lw = 1.0
-        az = r0.normalized()
-        ay = Quaternion.cross(r0, r1).normalized()  # cross product
-        wy = d0.normalized() if Quaternion.dot(d0, ay) >= 0 else - d0.normalized()  # reverse the direction depending on the dot product
-        ez = Quaternion.k()
-        ey = Quaternion.j()
-        rot     = estimate_rotation([az, ay, Quaternion.zero()], [ez, ey, Quaternion.zero()])
-        rot_inv = W.conjugate()
-        ba = - (rot @ ao)
-        bw = - (rot @ wo)
-
-        # done!
-        self.la = la
-        self.lw = lw
-        self.rot     = rot
-        self.rot_inv = rot_inv
-        self.ba = ba
-        self.bw = bw
-
-
-
-
 
 # -- その他
 
