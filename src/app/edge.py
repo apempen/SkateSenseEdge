@@ -210,7 +210,7 @@ class Calibrator:
         wy = d0.normalized() if Quaternion.dot(d0, ay) >= 0 else - d0.normalized()  # reverse the direction depending on the dot product
         ez = Quaternion.k()
         ey = Quaternion.j()
-        rot     = estimate_rotation([az, ay], [ez, ey])
+        rot     = estimate_rotation([az, ay, Quaternion.zero()], [ez, ey, Quaternion.zero()])
         rot_inv = W.conjugate()
         ba = - (rot @ ao)
         bw = - (rot @ wo)

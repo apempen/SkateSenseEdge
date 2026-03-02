@@ -48,7 +48,10 @@ class Quaternion:
             positive angle rotates clockwise when looking
             in the direction of the axis vector.
         """
-        ax, ay, az = axis
+        if isinstance(axis, Quaternion):
+            ax, ay, az = axis.imag()
+        else:
+            ax, ay, az = axis
         norm = math.sqrt(ax * ax + ay * ay + az * az)
         if norm == 0:
             raise ValueError("Axis must be non-zero")
@@ -125,10 +128,10 @@ class Quaternion:
             return NotImplemented
 
         return Quaternion(
-            self.w + other.w,
-            self.x + other.x,
-            self.y + other.y,
-            self.z + other.z )
+            self.w - other.w,
+            self.x - other.x,
+            self.y - other.y,
+            self.z - other.z )
 
     def __mul__(self, other):
         if isinstance(other, Quaternion):
@@ -140,7 +143,7 @@ class Quaternion:
                 w1*x2 + x1*w2 + y1*z2 - z1*y2,
                 w1*y2 - x1*z2 + y1*w2 + z1*x2,
                 w1*z2 + x1*y2 - y1*x2 + z1*w2 )
-        elif isinstance(other, float):
+        elif isinstance(other, float|int):
             return Quaternion(
                 self.w * other,
                 self.x * other,
@@ -152,7 +155,7 @@ class Quaternion:
     def __rmul__(self, other):
         if isinstance(other, Quaternion):
             return other.__mul__(self)
-        elif isinstance(other, float):
+        elif isinstance(other, float|int):
             return self.__mul__(other)
         else:
             return NotImplemented
@@ -160,7 +163,7 @@ class Quaternion:
     def __truediv__(self, other):
         if isinstance(other, Quaternion):
             return self.__mul__(other.inverse())
-        elif isinstance(other, float):
+        elif isinstance(other, float|int):
             return self.__mul__(1 / other)
         else:
             return NotImplemented
@@ -168,7 +171,7 @@ class Quaternion:
     def __rtruediv__(self, other):
         if isinstance(other, Quaternion):
             return other.__mul__(self)
-        elif isinstance(other, float):
+        elif isinstance(other, float|int):
             return self.inverse().__mul__(other)
         else:
             return NotImplemented
@@ -180,7 +183,7 @@ class Quaternion:
         return self
 
     def __abs__(self):
-        return norm()
+        return self.norm()
 
     def __eq__(self, other):
         if not isinstance(other, Quaternion):
@@ -192,7 +195,7 @@ class Quaternion:
 
     @staticmethod
     def dot(q1, q2):
-        return (q1 * q2).real()
+        return - (q1 * q2).real()
 
     @staticmethod
     def cross(q1, q2):
@@ -235,7 +238,9 @@ class Quaternion:
         #   rotation: self  (norm 1)
         #   operand:  other (pure quaternion)
         if isinstance(other, Quaternion):
-            return self * other * self.inverse()
+            r = self.normalized()
+            p = other.imagq()
+            return r * p * r.conjugate()
         else:
             return NotImplemented
 
@@ -251,20 +256,22 @@ class Quaternion:
         return iter([self.w, self.x, self.y, self.z])
 
 
-def estimate_rotation(self, xx, yy):
+def estimate_rotation(xx, yy):
     # https://en.wikipedia.org/wiki/Kabsch_algorithm
     #   Kabsch algorithm
     assert len(xx) == len(yy)
 
-    P = np.array([[p.x, p.y, p.z] for p in xx] + [[-p.x, -p.y, -p.z] for p in xx])
-    Q = np.array([[q.x, q.y, q.z] for q in yy] + [[-q.x, -q.y, -q.z] for q in yy])
+    P = np.array([[p.x, p.y, p.z] for p in xx])
+    Q = np.array([[q.x, q.y, q.z] for q in yy])
+    P -= np.mean(P, axis=0)
+    Q -= np.mean(Q, axis=0)
 
     H = P.T @ Q
     U, S, Vt = np.linalg.svd(H)
     d = np.sign(np.linalg.det(U @ Vt))
     D = np.diag([1.0, 1.0, d])
 
-    R = Vt.T @ D @ U.T
+    R = U @ D @ Vt
 
     return Quaternion.from_rotation_matrix(R)
 
@@ -281,7 +288,7 @@ class FitCircle:
         normal = U[:, 2]              # 最小特異値に対応するベクトルが法線
         # 2次元円フィッティング
         # https://myenigma.hatenablog.com/entry/2015/09/07/214600
-        Z_crushed = np.concatenate([Z @ P, np.ones((len(aa), 1))], axis=1)
+        Z_crushed = np.concatenate([Z_centered @ P, np.ones((len(aa), 1))], axis=1)
         F = Z_crushed.T @ Z_crushed
         g = np.array([
             -sum([x**3 + x * y**2 for x, y in zip(Z_crushed[:,0], Z_crushed[:,1])]),
@@ -291,7 +298,7 @@ class FitCircle:
         center = t[:2] / -2
         radius = math.sqrt(center[0]**2 + center[1]**2 - t[2])
         # 3次元化
-        self.center = Quaternion.pure(*(P @ center))
+        self.center = Quaternion.pure(*(P @ center + centroid))
         self.radius = radius
         self.eigenv = U
         self.r0     = Quaternion.pure(*P[:,0])
@@ -301,7 +308,8 @@ class FitCircle:
 
     def estimate(self, q):
         v = np.array(q.imag())
-        v = self.center + self.proj @ (v - self.center)
+        c = np.array(self.center.imag())
+        v = c + self.proj @ (v - c)
         return Quaternion.pure(*v)
 
 class FitLine:
@@ -314,12 +322,12 @@ class FitLine:
         H = Z_centered.T @ Z_centered
         eigenvalues, U = np.linalg.eig(H)
         direction = U[:, 0]
-        self.center    = centroid
+        self.center    = Quaternion.pure(*centroid)
         self.direction = Quaternion.pure(*direction)
-        self.resid     = eigenvalues[1:].norm()
+        self.resid     = np.linalg.norm(eigenvalues[1:])
 
     def estimate(self, q):
-        return self.center + self.direction * Quaternion.dot(self.direction, q)
+        return self.center + self.direction * Quaternion.dot(self.direction, q - self.center)
 
 
 def fit_circle(aa):
