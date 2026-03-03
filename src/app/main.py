@@ -47,10 +47,22 @@ def vmul(xs, a):
 # --- プログラム本体 ---
 
 maxlen = 100  # グラフに表示するデータの個数
+record_count = 0
 records = deque(maxlen=maxlen) # データを溜めるキュー、キューだから過去のデータが消えてく
 lastmouse = False
 pivotx = 0
 pivoty = 0
+
+# 状態遷移を管理する変数
+mode = 'normal'
+phase = 'normal'
+message = 'aa'
+
+# キャリブレーション用のデータ置き場
+raw_acc_list  = list()
+raw_gyro_list = list()
+keyframe1     = None
+keyframe2     = None
 
 graph = None
 sphere = None
@@ -65,12 +77,12 @@ def setup():
 
 
 def draw():
-    global lastmouse, pivotx, pivoty
+    global lastmouse, pivotx, pivoty, record_count
     # プログラム中繰り返し呼ばれる
 
     # データを読み込む
     tmp = edge.ask_records()
-    count = len(tmp)                    # この描画フレームで読み込まれたデータ数
+    record_count = len(tmp)                    # この描画フレームで読み込まれたデータ数
     records.extend(tmp)  # キューに追加
 
     # TODO: 以下の描画用コードは仮置きなので、後々見やすいように書き換える必要があります
@@ -103,9 +115,11 @@ def draw():
     # 文字列表示
     py5.fill(0)
     py5.text_align(py5.LEFT, py5.TOP)
-    py5.text('count: {}'.format(count), 480, 20)
+    py5.text('count: {}'.format(record_count), 480, 20)
     if len(records) != 0:
         py5.text(repr(records[-1]), 10, 410, py5.width - 20, py5.height - 420)
+    py5.fill(40)
+    py5.text(message, 0, 460, py5.width, 20)
 
     # グラフにプロット
     if len(records) != 0:
@@ -163,6 +177,86 @@ def draw():
     py5.stroke(255, 0, 0)
     py5.fill(255)
     py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
+
+    # その他
+    on_calibration()
+
+
+def key_pressed():
+    key = py5.key
+    if key == 'c':
+        if mode == 'normal' or mode == 'calibration':
+            do_calibration()
+
+
+def do_calibration():
+    global mode, phase, message, raw_acc_list, raw_gyro_list, keyframe1, keyframe2
+
+    # initiation
+    if mode == 'normal':
+        mode = 'calibration'
+        phase = 0
+        raw_acc_list = list()
+        raw_gyro_list = list()
+        keyframe1 = None
+        keyframe2 = None
+    elif mode == 'calibration':
+        phase += 1
+    else:
+        return
+
+    if phase == 0:
+        message = 'Calibrating sensors... Place the blade on the ground, hold the shoe upright and press the C key'
+    elif phase == 1:
+        keyframe1 = len(raw_acc_list)
+        message = 'Calibrating sensors... Keep the blade on the ground, gently decline the shoe to the right and press the C key'
+    elif phase == 2:
+        keyframe2 = len(raw_acc_list)
+        message = 'Calibrating sensors... Keep the blade on the ground, gently decline the shoe to the left and press the C key'
+    else:
+        a0 = calibration_agg(raw_acc_list, keyframe1)
+        a1 = calibration_agg(raw_acc_list, keyframe2)
+        w0 = calibration_agg(raw_gyro_list, keyframe1)
+        w1 = calibration_agg(raw_gyro_list, keyframe2)
+        aa = calibration_spr(raw_acc_list, 30)
+        ww = calibration_spr(raw_gyro_list, 30)
+        edge.calibrate(a0, a1, aa, w0, w1, ww)
+        message = 'Perfect!'
+        mode = 'normal'
+
+def on_calibration():
+    global mode, phase, message, raw_acc_list, raw_gyro_list, keyframe1, keyframe2
+    if mode == 'calibration':
+        for i in range(record_count):
+            raw_acc_list.append(records[-record_count+i].a)
+            raw_gyro_list.append(records[-record_count+i].w)
+
+
+def calibration_agg(ls, kf, w=5):
+    # リストの kf 番目の要素の前後を平均する
+    #   ただしリストの要素型は tuple[float|int, float|int, float|int]
+    ls = ls[kf-w:kf+w]
+    n = len(ls)
+    if n == 0:
+        return (0, 0, 0)
+    x = y = z = 0
+    for item in ls:
+        x += item[0]
+        y += item[1]
+        z += item[2]
+    return (x / n, y / n, z / n)
+
+def calibration_spr(ls, n):
+    # リストの中から n 個残して間引く
+    retval = list()
+    m = len(ls)
+    if m <= n:
+        return ls.copy()
+    d = m / n
+    for i in range(n):
+        retval.append(ls[int(d * i)])
+    return retval
+
 
 
 
