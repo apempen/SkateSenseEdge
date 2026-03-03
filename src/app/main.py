@@ -13,7 +13,7 @@ import edge                      # serialの代わり
 import py5                       # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
 import numpy as np
 from graph import GraphDrawer, SphereDrawer, EllipseDrawer  # グラフ表示用のスクリプト
-
+import cv2
 
 
 
@@ -67,6 +67,10 @@ keyframe2     = None
 graph = None
 sphere = None
 ellipse = None
+camera = None           # Camoなどの仮想/実カメラ入力
+camera_img = None       # py5へ描画するための画像バッファ
+camera_img_w = 0        # バッファ再生成判定用（入力フレーム幅）
+camera_img_h = 0        # バッファ再生成判定用（入力フレーム高）
 
 key = 0
 
@@ -74,16 +78,26 @@ show_3d = True
 
 
 def setup():
-    global graph, sphere, ellipse
+    global graph, sphere, ellipse, camera, camera_img, camera_img_w, camera_img_h
     # プログラムの最初に1度だけ呼ばれる
     py5.size(960, 480)  # ウィンドウサイズ、P3Dとすることで3次元描画が可能
-    py5.frame_rate(10)
+    py5.frame_rate(30)  # カメラ映像の体感遅延を減らすため30fpsで描画
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
     ellipse = EllipseDrawer(400,400)
+    camera = cv2.VideoCapture(1)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
+    if not camera.isOpened():
+        camera = None
+    else:
+        # 遅延対策: バッファを浅くし、古いフレームが溜まりにくい設定にする
+        camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        camera.set(cv2.CAP_PROP_FPS, 30)
+        camera_img = None
+        camera_img_w = 0
+        camera_img_h = 0
 
 def draw():
-    global lastmouse, pivotx, pivoty, show_3d, record_count
+    global lastmouse, pivotx, pivoty, show_3d, record_count, camera, camera_img, camera_img_w, camera_img_h
     # プログラム中繰り返し呼ばれる
 
     # データを読み込む
@@ -180,7 +194,44 @@ def draw():
                 'calib gravity', icon='G', color=(0, 0, 0),
                 fn_value  = lambda y: vmul(y, 1.0),
                 fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
-    graph.plot(40, 0)
+    if camera is not None:
+        # grab/retrieveを使ってキュー内の古いフレームを捨て、遅延を減らす
+        ok = False
+        frame = None
+        for _ in range(2):
+            if not camera.grab():
+                break
+            ok, frame = camera.retrieve()
+        if ok:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w = frame_rgb.shape[:2]
+            if camera_img is None or camera_img_w != w or camera_img_h != h:
+                # 入力解像度が変わったときだけpy5画像を作り直す
+                camera_img = py5.create_image(w, h, py5.RGB)
+                camera_img_w = w
+                camera_img_h = h
+            camera_img.set_np_pixels(frame_rgb, bands="RGB")
+            # 左ペイン(400x400)に縦横比を保ったまま収め、右側表示と重ならないようにする
+            box_x = 40
+            box_y = 0
+            box_w = 400
+            box_h = 400
+            scale = min(box_w / w, box_h / h)
+            draw_w = int(w * scale)
+            draw_h = int(h * scale)
+            draw_x = box_x + (box_w - draw_w) // 2
+            draw_y = box_y + (box_h - draw_h) // 2
+            py5.fill(246)
+            py5.stroke(0)
+            py5.rect(box_x, box_y, box_w, box_h)
+            py5.image(camera_img, draw_x, draw_y, draw_w, draw_h)
+            graph.reset()  # 今フレームはgraphを描かないため、積んだ系列を明示的にクリア
+        else:
+            # カメラフレーム取得失敗時は従来のグラフ表示にフォールバック
+            graph.plot(40, 0)
+    else:
+        # カメラ未接続時は従来のグラフ表示
+        graph.plot(40, 0)
     
     if show_3d:
         sphere.plot(480, 0, rx, ry)
@@ -279,6 +330,17 @@ def calibration_spr(ls, n):
     for i in range(n):
         retval.append(ls[int(d * i)])
     return retval
+
+
+def exiting():
+    global camera, camera_img, camera_img_w, camera_img_h
+    if camera is not None:
+        camera.release()
+        camera = None
+    # 再実行時の状態混入を避けるため、画像バッファ情報も初期化
+    camera_img = None
+    camera_img_w = 0
+    camera_img_h = 0
 
 
 

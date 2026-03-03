@@ -5,6 +5,7 @@
 import math
 import numpy as np
 import py5
+import cv2
 
 # utilities
 
