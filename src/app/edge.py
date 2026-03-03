@@ -101,6 +101,19 @@ def get_time_ms():
     # what time is it now? (milliseconds, integer)
     return math.floor(time.time() * 1000)
 
+def calibrate(a0, a1, aa, w0, w1, ww):
+    if _calib is not None:
+        _calib.calibrate(
+                Quaternion.pure(*a0),
+                Quaternion.pure(*a1),
+                [Quaternion.pure(*a) for a in aa],
+                Quaternion.pure(*w0),
+                Quaternion.pure(*w1),
+                [Quaternion.pure(*w) for w in ww] )
+        return True
+    else:
+        return False
+
 
 # -- データ取得
 
@@ -194,11 +207,72 @@ class Filter:
     def __init__(self):
         # 拡張カルマンフィルタ
         self.t   = 0.0
-        self.x   = Quaternion.identity()   # クォータニオンで状態保持
-        self.gravity = Quaternion.k()
-        self.P   = np.zeros((3, 3))
-        self.Q   = np.zeros((3, 3))
+        self.gravity       = Quaternion.k()
+        self.posture       = Quaternion.identity()
+        self.body_accel    = Quaternion.zero()
+        self.body_velocity = Quaternion.zero()
+        # カルマンフィルタ本体
+        self.x   = np.zeros(9)  # posture + accel + velocity
+        self.P   = np.zeros((9, 9))
+        self.Q   = np.zeros((9, 9))
         self.R   = np.zeros((3, 3))
+
+    def set(self, *, gravity=None, q_posture=None, q_accel=None, q_velocity=None, r_accel=None):
+
+        if gravity is not None:
+            if isinstance(gravity, Quaternion):
+                self.gravity = gravity.imagq()
+            else:
+                self.gravity = Quaternion.pure(*gravity)
+
+        if q_posture is not None:
+            if isinstance(q_posture, np.ndarray):
+                self.Q[0:3,0:3] = q_posture.reshape((3,3))
+            elif isinstance(q_posture, float|int):
+                self.Q[0:3,0:3] = np.diag([q_posture**2] * 3)
+            else:
+                self.Q[0:3,0:3] = np.diag(q_posture)
+
+        if q_accel is not None:
+            if isinstance(q_accel, np.ndarray):
+                self.Q[3:6,3:6] = q_accel.reshape((3,3))
+            elif isinstance(q_accel, float|int):
+                self.Q[3:6,3:6] = np.diag([q_accel**2] * 3)
+            else:
+                self.Q[3:6,3:6] = np.diag(q_accel)
+
+        if q_velocity is not None:
+            if isinstance(q_velocity, np.ndarray):
+                self.Q[6:9,6:9] = q_velocity.reshape((3,3))
+            elif isinstance(q_velocity, float|int):
+                self.Q[6:9,6:9] = np.diag([q_velocity**2] * 3)
+            else:
+                self.Q[6:9,6:9] = np.diag(q_velocity)
+
+        if r_accel is not None:
+            if isinstance(r_accel, np.ndarray):
+                self.R[0:3,0:3] = r_accel.reshape((3,3))
+            elif isinstance(r_accel, float|int):
+                self.R[0:3,0:3] = np.diag([r_accel**2] * 3)
+            else:
+                self.R[0:3,0:3] = np.diag(r_accel)
+
+
+    @staticmethod
+    def drmat3x3(q):
+        return [
+            np.array([
+                [  4 * q.x,  2 * q.y,  2 * q.z ],
+                [  2 * q.y,        0, -2 * q.w ],
+                [  2 * q.z,  2 * q.w,        0 ] ]),
+            np.array([
+                [        0,  2 * q.x,  2 * q.w ],
+                [  2 * q.x,  4 * q.y,  2 * q.z ],
+                [ -2 * q.w,  2 * q.z,        0 ] ]),
+            np.array([
+                [        0, -2 * q.w,  2 * q.x ],
+                [  2 * q.w,        0,  2 * q.y ],
+                [  2 * q.x,  2 * q.y,  4 * q.z ] ]) ]
 
 
     def filter(self, t, a, w):
@@ -209,43 +283,46 @@ class Filter:
         dt = t - self.t
         self.t = t
 
-        # 現在の姿勢は一度他の変数にのけておかないと
-        #   計算がかなり大変？不可能？
-        #   実部の絶対値を大きく保ちたい
-        last_x = x
-        x = Quaternion.identity()
-
-        f = Quaternion.from_axis_angle(w, w.norm() * dt)
-        x = f
-        F = np.array([
-            [  f.w,  f.z, -f.y ],
-            [ -f.z,  f.w,  f.x ],
-            [  f.y, -f.x,  f.w ] ])
-        P = F @ P @ F.T + self.Q
-        r = last_x.conjugate() @ a - self.gravity  # 観測値を逆向きに回転させる
-        gravity = np.array(self.gravity.imag()).reshape(3,1)
-        H = np.concatenate([
-            np.array([
-                [  4 * x.x,  2 * x.y,  2 * x.z ],
-                [  2 * x.y,        0, -2 * x.w ],
-                [  2 * x.z,  2 * x.w,        0 ] ]) @ gravity,
-            np.array([
-                [        0,  2 * x.x,  2 * x.w ],
-                [  2 * x.x,  4 * x.y,  2 * x.z ],
-                [ -2 * x.w,  2 * x.z,        0 ] ]) @ gravity,
-            np.array([
-                [        0, -2 * x.w,  2 * x.x ],
-                [  2 * x.w,        0,  2 * x.y ],
-                [  2 * x.x,  2 * x.y,  4 * x.z ] ]) @ gravity ], axis=1)
+        # 予測
+        rotq = Quaternion.from_axis_angle(w, w.norm() * dt)
+        rotm = Quaternion.to_rotation_matrix(rotq)
+        x[0:3] = rotq.imag()                    # 角速度により回転させる
+        x[3:6] = rotm @ x[3:6]                  # 現状維持
+        x[6:9] = rotm @ (x[6:9] + dt * x[3:6])  # 加速度を角速度に
+        F = np.zeros((9,9))
+        F[0:3,0:3] = np.array([
+            [  rotq.w,  rotq.z, -rotq.y ],
+            [ -rotq.z,  rotq.w,  rotq.x ],
+            [  rotq.y, -rotq.x,  rotq.w ] ])
+        F[3:6,3:6] = rotm
+        F[6:9,3:6] = dt * rotm
+        F[6:9,6:9] = rotm
+        P = F @ P @ F.T + self.Q * dt
+        # 残差
+        z_accel = np.array((a).imag())
+        x_accel = np.array((self.posture * rotq @ self.gravity).imag())
+        r = z_accel - x_accel
+        H = np.zeros((3,9))
+        H[0:3,0:3] = np.stack([
+            Quaternion.to_rotation_matrix(self.posture) @ drmat @ np.array(self.gravity.imag())
+            for drmat in Filter.drmat3x3(rotq) ], axis=1)
+        H[0:3,3:6] = np.identity(3)
         S = H @ P @ H.T + self.R
+        # 求ゲイン
         K = P @ H.T @ np.linalg.inv(S)
-        x = (x + Quaternion(1, *(K @ np.array(r.imag())))).normalized()
+        x = x + K @ r
         P = P - K @ H @ P
-
-        x = last_x * x  # 元通り！
+        # 事後処理
+        self.posture       = (self.posture * Quaternion(1, *x[0:3])).normalized()
+        self.body_accel    = Quaternion.pure(*x[3:6])
+        self.body_velocity = Quaternion.pure(*x[6:9])
+        x[0:3] = 0
 
         self.x = x
         self.P = P
+
+
+
 
 
 # global status
@@ -263,36 +340,15 @@ def destroy_memory():
     _jump_count = 0
     _calib = Calibrator()
     _filter = Filter()
-    # ------------ (後で消す)
-    try:
-        raise OSError()
-        with open('ignore/cap1.log', 'r') as f:
-            text = f.read()
-        items = list()
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            items.append(list(map(float, line.split(','))))
-        aa = [Quaternion.pure(x, y, z) for _,x,y,z,_,_,_ in items]
-        ww = [Quaternion.pure(x, y, z) for _,_,_,_,x,y,z in items]
-        a0 = sum(aa[100:110], Quaternion.zero()) / 10
-        a1 = sum(aa[240:250], Quaternion.zero()) / 10
-        w0 = sum(ww[100:110], Quaternion.zero()) / 10
-        w1 = sum(ww[240:250], Quaternion.zero()) / 10
-        _calib.calibrate(a0, a1, aa, w0, w1, ww)
-    except OSError:
-        pass
-    print('!!!! PLEASE REMOVE ME LATER!!!!! from edge.py destroy_memory()')
-    # ------------
 
     # カルマンフィルタの定数や初期値
     #   単位は s, m/s/s, rad/s など（センサから送られてくる値は ms, g, deg/s なので注意）
-    q = 3 * _const_deg
-    r = 0.5
-    _filter.Q = np.diag([q**2] * 3)
-    _filter.R = np.diag([r**2] * 3)
-    _filter.gravity = Quaternion.k() * _const_g
+    _filter.set(
+            q_posture   = 1.5 * _const_deg,   # [rad/s]
+            q_accel     = 0.001,             # [m/s/s/s]
+            q_velocity  = 0.02,               # [m/s/s/s]
+            r_accel     = 0.5,                # [m/s/s]
+            gravity     = Quaternion.pure(0, 0, _const_g) )
 
 def make_record(sensor: list):
     global _jump_count
@@ -318,14 +374,15 @@ def make_record(sensor: list):
     accel   = _calib.transform_a(a)
     angvel  = _calib.transform_w(w)
     # カルマンフィルタ
-    _filter.filter(t * _const_ms, a * _const_g, w * _const_deg)
-    gravity = _filter.x @ _filter.gravity / _const_g
-    q       = _filter.x
+    _filter.filter(t * _const_ms, accel * _const_g, angvel * _const_deg)
+    gravity = _filter.posture @ _filter.gravity / _const_g
+    q       = _filter.posture
+    accel   = _filter.body_accel
     # 傾きの計算
     R       = Quaternion.to_rotation_matrix(q)
-    roll    = np.arcsin(R[0,2])
-    pitch   = np.arctan2(-R[1,2], R[2,2]) if np.cos(roll) != 0 else np.arctan2(R[2,1], R[1,1])
-    yaw     = np.arctan2(-R[0,1], R[0,0]) if np.cos(roll) != 0 else 0.0
+    roll    = math.asin(R[0,2])
+    pitch   = math.atan2(-R[1,2], R[2,2]) if math.cos(roll) != 0 else math.atan2(R[2,1], R[1,1])
+    yaw     = math.atan2(-R[0,1], R[0,0]) if math.cos(roll) != 0 else 0.0
     tilt    = roll
 
     return Record(
