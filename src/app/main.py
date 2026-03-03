@@ -152,6 +152,10 @@ def draw():
                 'calib gyro', icon='W', color=(155,33,0),
                 fn_value  = lambda y: vmul(y, math.pi / 180 * 0.4),
                 fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
+        sphere.set_vector(nan2zero(rec0.gravity),
+                'calib gravity', icon='G', color=(0, 0, 0),
+                fn_value  = lambda y: vmul(y, 1.0),
+                fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
     graph.plot(40, 0)
     sphere.plot(480, 0, rx, ry)
 

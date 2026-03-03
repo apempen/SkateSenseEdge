@@ -109,6 +109,23 @@ class Quaternion:
 
         return Quaternion(w, x, y, z).normalized()
 
+    @staticmethod
+    def to_rotation_matrix(q):
+        q = q.normalized()
+        R = np.array([
+            [   2 * q.w**2 + 2 * q.x**2 - 1,
+                2 * q.x * q.y - 2 * q.z * q.w,
+                2 * q.x * q.z + 2 * q.y * q.w   ],
+            [   2 * q.x * q.y + 2 * q.z * q.w,
+                2 * q.w**2 + 2 * q.y**2 - 1,
+                2 * q.y * q.z - 2 * q.x * q.w   ],
+            [   2 * q.x * q.z - 2 * q.y * q.w,
+                2 * q.y * q.z + 2 * q.x * q.w,
+                2 * q.w**2 + 2 * q.z**2 - 1     ] ])
+        return R
+
+
+
     # ----------------------------
     # Quaternion algebra
     # ----------------------------
