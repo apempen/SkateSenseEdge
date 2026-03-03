@@ -13,7 +13,7 @@ import edge                      # serialの代わり
 import py5                       # pltの代わり。Processingに似た文法で簡単にGUIを作成できる
 import numpy as np
 from graph import GraphDrawer, SphereDrawer, EllipseDrawer  # グラフ表示用のスクリプト
-
+import cv2
 
 
 
@@ -55,6 +55,7 @@ pivoty = 0
 graph = None
 sphere = None
 ellipse = None
+camera = None
 
 key = 0
 
@@ -62,16 +63,19 @@ show_3d = True
 
 
 def setup():
-    global graph, sphere, ellipse
+    global graph, sphere, ellipse, camera
     # プログラムの最初に1度だけ呼ばれる
     py5.size(960, 480)  # ウィンドウサイズ、P3Dとすることで3次元描画が可能
     py5.frame_rate(10)
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
     ellipse = EllipseDrawer(400,400)
+    camera = cv2.VideoCapture(0)
+    if not camera.isOpened():
+        camera = None
 
 def draw():
-    global lastmouse, pivotx, pivoty, show_3d
+    global lastmouse, pivotx, pivoty, show_3d, camera
     # プログラム中繰り返し呼ばれる
 
     # データを読み込む
@@ -146,7 +150,17 @@ def draw():
                  'sensor gyro', icon='w', color=(155,33,0),
                  fn_value  = lambda y: vmul(y, math.pi / 180),
                  fn_pretty = lambda y: '{:d} deg/s'.format(int(rss(y))) )
-    graph.plot(40, 0)
+    if camera is not None:
+        ok, frame = camera.read()
+        if ok:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = py5.convert_image(frame_rgb)
+            py5.image(img, 40, 0, 400, 400)
+            graph.reset()
+        else:
+            graph.plot(40, 0)
+    else:
+        graph.plot(40, 0)
     
     if show_3d:
         sphere.plot(480, 0, rx, ry)
@@ -169,6 +183,13 @@ def key_pressed():
         show_3d = False
     elif py5.key == '3':
         show_3d = True
+
+
+def exiting():
+    global camera
+    if camera is not None:
+        camera.release()
+        camera = None
 
 
 
