@@ -287,16 +287,16 @@ class Filter:
         rotq = Quaternion.from_axis_angle(w, w.norm() * dt)
         rotm = Quaternion.to_rotation_matrix(rotq)
         x[0:3] = rotq.imag()                    # 角速度により回転させる
-        x[3:6] = rotm @ x[3:6]                  # 現状維持
-        x[6:9] = rotm @ (x[6:9] + dt * x[3:6])  # 加速度を角速度に
+        x[3:6] = 0.0 #rotm @ x[3:6]                  # 現状維持
+        x[6:9] = 0.0 #rotm @ (x[6:9] + dt * x[3:6])  # 加速度を角速度に
         F = np.zeros((9,9))
         F[0:3,0:3] = np.array([
             [  rotq.w,  rotq.z, -rotq.y ],
             [ -rotq.z,  rotq.w,  rotq.x ],
             [  rotq.y, -rotq.x,  rotq.w ] ])
-        F[3:6,3:6] = rotm
-        F[6:9,3:6] = dt * rotm
-        F[6:9,6:9] = rotm
+        F[3:6,3:6] = 0.0 #rotm
+        F[6:9,3:6] = 0.0 #dt * rotm
+        F[6:9,6:9] = 0.0 #rotm
         P = F @ P @ F.T + self.Q * dt
         # 残差
         z_accel = np.array((a).imag())
@@ -306,7 +306,7 @@ class Filter:
         H[0:3,0:3] = np.stack([
             Quaternion.to_rotation_matrix(self.posture) @ drmat @ np.array(self.gravity.imag())
             for drmat in Filter.drmat3x3(rotq) ], axis=1)
-        H[0:3,3:6] = np.identity(3)
+        H[0:3,3:6] = 0.0 #np.identity(3)
         S = H @ P @ H.T + self.R
         # 求ゲイン
         K = P @ H.T @ np.linalg.inv(S)
