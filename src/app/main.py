@@ -85,10 +85,13 @@ def setup():
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
     ellipse = EllipseDrawer(400,400)
-    camera = cv2.VideoCapture(1)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
-    if not camera.isOpened():
+    print('# trying to init camera...')
+    camera = cv2.VideoCapture(9)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
+    if camera is None or not camera.isOpened():
+        print('#   failed...')
         camera = None
     else:
+        print('#   succeeded!')
         # 遅延対策: バッファを浅くし、古いフレームが溜まりにくい設定にする
         camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         camera.set(cv2.CAP_PROP_FPS, 30)
@@ -145,6 +148,8 @@ def draw():
     if len(records) != 0:
         rec0 = records[-1]
         xs = [float(rec.t - rec0.t) / 1000.0 for rec in records]
+
+        # `graph`: 横軸がt（時間）のグラフプロット
         graph.set_xs(xs, fn_value  = lambda x: x * 2 + 1.0 )
         graph.set_ys([nan2zero(rec.tilt) for rec in records],
                 'tilt', icon='/', color=(20,20,223),
@@ -170,10 +175,16 @@ def draw():
                 'jumping', icon='J', color=(0,200,0),
                 fn_value  = lambda y: -0.01 + 0.02 * int(y),
                 fn_pretty = lambda y: 'air' if y else 'grounded' )
-        
-        ax = nan2zero(rec0.a[0])
-        ay = nan2zero(rec0.a[1])
-        ellipse.plot_point(ax, ay, 'Accel XY', icon='A', color=(255, 99, 0))
+
+        # `ellipse`: xz平面の空間プロット（ブレードの角度）
+        th = - rec0.tilt
+        shoex = math.cos(th + math.pi/2)
+        shoey = math.sin(th + math.pi/2)
+        ellipse.plot_point(shoex, shoey,
+                'The Blade ({:d} deg)'.format(int(th * 180 / math.pi)),
+                icon='A', color=(255, 99, 0) )
+
+        # `sphere`: xyz空間の3次元プロット（重力や加速度など）
         sphere.set_vector(nan2zero(rec0.a),
                 'sensor accel', icon='a', color=(255,99,0),
                 fn_value  = lambda y: vmul(y, 1.0),
@@ -237,11 +248,24 @@ def draw():
         sphere.plot(480, 0, rx, ry)
     else:
         ellipse.plot(480,0)
+
+    # リソース解放（軽微なデバッグ）
+    graph.reset()
+    sphere.reset()
+    ellipse.reset()
     
         # カーソル描画
     py5.stroke(255, 0, 0)
     py5.fill(255)
     py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
+
+    # 最大値を表示
+    py5.stroke(0,0,0)
+    py5.fill(0,0,0)
+    maxacc = max([rss(rec.a) for rec in records])
+    py5.text('maximum acc. cpt. {:7.3f} G'.format(maxacc), 500, 321)
+    maxang = max([rss(rec.w) for rec in records])
+    py5.text('maximum ang. cpt. {:7.3f} deg/s'.format(maxang), 500, 334)
     
     # その他
     on_calibration()
