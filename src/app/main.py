@@ -80,24 +80,11 @@ show_3d = True
 def setup():
     global graph, sphere, ellipse, camera, camera_img, camera_img_w, camera_img_h
     # プログラムの最初に1度だけ呼ばれる
-    py5.size(960, 480)  # ウィンドウサイズ、P3Dとすることで3次元描画が可能
+    py5.size(480 * 3, 480)  # ウィンドウサイズ、P3Dとすることで3次元描画が可能
     py5.frame_rate(30)  # カメラ映像の体感遅延を減らすため30fpsで描画
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
     ellipse = EllipseDrawer(400,400)
-    print('# trying to init camera...')
-    camera = cv2.VideoCapture(9)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
-    if camera is None or not camera.isOpened():
-        print('#   failed...')
-        camera = None
-    else:
-        print('#   succeeded!')
-        # 遅延対策: バッファを浅くし、古いフレームが溜まりにくい設定にする
-        camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        camera.set(cv2.CAP_PROP_FPS, 30)
-        camera_img = None
-        camera_img_w = 0
-        camera_img_h = 0
 
 def draw():
     global lastmouse, pivotx, pivoty, show_3d, record_count, camera, camera_img, camera_img_w, camera_img_h
@@ -144,7 +131,7 @@ def draw():
     py5.fill(40)
     py5.text(message, 0, 460, py5.width, 20)
 
-    # グラフにプロット
+    # プロットするデータを graph, ellipse, sphere などのインスタンスに流し込む
     if len(records) != 0:
         rec0 = records[-1]
         xs = [float(rec.t - rec0.t) / 1000.0 for rec in records]
@@ -178,6 +165,8 @@ def draw():
 
         # `ellipse`: xz平面の空間プロット（ブレードの角度）
         th = - rec0.tilt
+        if math.isnan(th):
+            th = 0.0
         shoex = math.cos(th + math.pi/2)
         shoey = math.sin(th + math.pi/2)
         ellipse.plot_point(shoex, shoey,
@@ -205,6 +194,8 @@ def draw():
                 'calib gravity', icon='G', color=(0, 0, 0),
                 fn_value  = lambda y: vmul(y, 1.0),
                 fn_pretty = lambda y: '{:.2f} G'.format(rss(y)) )
+
+    # 流し込まれたデータやキャプチャされたカメラ画像を画面に表示
     if camera is not None:
         # grab/retrieveを使ってキュー内の古いフレームを捨て、遅延を減らす
         ok = False
@@ -236,18 +227,13 @@ def draw():
             py5.stroke(0)
             py5.rect(box_x, box_y, box_w, box_h)
             py5.image(camera_img, draw_x, draw_y, draw_w, draw_h)
-            graph.reset()  # 今フレームはgraphを描かないため、積んだ系列を明示的にクリア
-        else:
-            # カメラフレーム取得失敗時は従来のグラフ表示にフォールバック
-            graph.plot(40, 0)
-    else:
-        # カメラ未接続時は従来のグラフ表示
-        graph.plot(40, 0)
-    
+
     if show_3d:
         sphere.plot(480, 0, rx, ry)
     else:
         ellipse.plot(480,0)
+
+    graph.plot(960, 0)
 
     # リソース解放（軽微なデバッグ）
     graph.reset()
@@ -369,16 +355,33 @@ def exiting():
 
 
 
-
-
 if __name__ == '__main__':
 
-    if len(sys.argv) != 2:
-        print('usage: {} PORT'.format(sys.argv[0]), file=sys.stderr)
+    try:
+        port = sys.argv[1]
+        camid = int(sys.argv[2]) if len(sys.argv) >= 3 else None
+        baudrate = 115200
+    except (TypeError, IndexError):
+        print('usage: {} PORT [CAMERA_ID]'.format(sys.argv[0]), file=sys.stderr)
         exit(254)
 
-    port = sys.argv[1]
-    baudrate = 115200
+    if camid is not None:
+        print('# trying to init camera {}...'.format(camid))
+        # 更新: 実行時引数 CAMERA_ID でキャプチャするカメラを選択できます
+        camera = cv2.VideoCapture(camid)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
+        if camera is None or not camera.isOpened():
+            print('#   failed...')
+            camera = None
+        else:
+            print('#   succeeded!')
+            # 遅延対策: バッファを浅くし、古いフレームが溜まりにくい設定にする
+            camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            camera.set(cv2.CAP_PROP_FPS, 30)
+            camera_img = None
+            camera_img_w = 0
+            camera_img_h = 0
+    else:
+        camera = None
 
     rc = edge.init(port, baudrate)
     if rc != 0:

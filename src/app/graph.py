@@ -131,6 +131,7 @@ class GraphDrawer:
         self.reset()
 
     def _plot_background(self):
+        py5.stroke_weight(1)
         py5.stroke(0)
         py5.fill(246)
         py5.rect(0, 0, self.__gw, self.__gh)
