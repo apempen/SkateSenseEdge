@@ -85,10 +85,13 @@ def setup():
     graph = GraphDrawer(400, 400)
     sphere = SphereDrawer(400, 400)
     ellipse = EllipseDrawer(400,400)
-    camera = cv2.VideoCapture(1)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
-    if not camera.isOpened():
+    print('# trying to init camera...')
+    camera = cv2.VideoCapture(9)  # Camo側で認識されたカメラindex この部分は0か1か2になる。自分は0にしたらPCのカメラが映った
+    if camera is None or not camera.isOpened():
+        print('#   failed...')
         camera = None
     else:
+        print('#   succeeded!')
         # 遅延対策: バッファを浅くし、古いフレームが溜まりにくい設定にする
         camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         camera.set(cv2.CAP_PROP_FPS, 30)
@@ -255,6 +258,14 @@ def draw():
     py5.stroke(255, 0, 0)
     py5.fill(255)
     py5.ellipse(py5.mouse_x, py5.mouse_y, 4, 4)
+
+    # 最大値を表示
+    py5.stroke(0,0,0)
+    py5.fill(0,0,0)
+    maxacc = max([rss(rec.a) for rec in records])
+    py5.text('maximum acc. cpt. {:7.3f} G'.format(maxacc), 500, 321)
+    maxang = max([rss(rec.w) for rec in records])
+    py5.text('maximum ang. cpt. {:7.3f} deg/s'.format(maxang), 500, 334)
     
     # その他
     on_calibration()

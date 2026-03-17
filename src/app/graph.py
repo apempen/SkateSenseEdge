@@ -446,6 +446,10 @@ class EllipseDrawer:
             py5.no_stroke()
             py5.fill(*p['color'])
             py5.ellipse(px, py, 8, 8)
+
+            # 直線の描画
+            py5.stroke(*p['color'])
+            py5.line(self.__ox, self.__oy, px, py)
             
             # テキスト表示
             py5.fill(0)
